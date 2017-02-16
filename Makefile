@@ -5,7 +5,7 @@ build:
 	docker build -t foospidy/honeypy:latest .
 
 build-debian:
-	./generate_dockerfile.sh debian
+	OS=debian ./generate_dockerfile.sh
 	docker build -t foospidy/honeypy:latest .
 
 build-fresh:
@@ -13,7 +13,7 @@ build-fresh:
 	docker build --no-cache -t foospidy/honeypy:latest .
 
 build-debian-fresh:
-	./generate_dockerfile.sh debian
+	OS=debian ./generate_dockerfile.sh
 	docker build --no-cache -t foospidy/honeypy:latest .
 
 run:
