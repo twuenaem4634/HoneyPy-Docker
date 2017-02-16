@@ -5,74 +5,67 @@ PORTMAP_FILE=ports.map
 IPADDRESS='0.0.0.0'
 OS='alpine'
 
-if [ ! -z $1 ];
-then
-    if [ "debian" = "${1}" ];
-    then
+if [ ! -z $1 ]; then
+    if [ "debian" = "${1}" ]; then
         OS='debian'
     fi
 fi
 
 
-echo "# auto-generated Dockerfile" > $DOCKERFILE
-echo "FROM ${OS}" >> $DOCKERFILE
-
-echo "MAINTAINER foospidy" >> $DOCKERFILE
+cat << EOT > $DOCKERFILE
+# auto-generated Dockerfile
+FROM ${OS}
+MAINTAINER foospidy
+EOT
 
 # install software
-if [ "alpine" = "${OS}" ];
-then
-    echo "RUN apk update" >> $DOCKERFILE
-    echo "RUN apk add wget unzip ca-certificates python py-pip py-setuptools python-dev musl-dev gcc" >> $DOCKERFILE
-    RUN update-ca-certificates
-    echo "RUN pip install requests" >> $DOCKERFILE
-    echo "RUN pip install twisted" >> $DOCKERFILE
-    echo "RUN pip install pipreqs" >> $DOCKERFILE
+if [ "alpine" = "${OS}" ]; then
+    cat << EOT >> $DOCKERFILE
+RUN apk update && \\
+    apk add wget unzip ca-certificates python py-pip py-setuptools python-dev musl-dev gcc && \\
+    pip install requests && \\
+    pip install twisted && \\
+    pip install pipreqs && \\
+    addgroup honey && \\
+    adduser -s /bin/bash -D -G honey honey && \\
+EOT
 else
-    echo "RUN apt-get update" >> $DOCKERFILE
-    echo "RUN apt-get install -y wget unzip python python-pip python-requests python-twisted" >> $DOCKERFILE
-    echo "RUN apt-get clean" >> $DOCKERFILE
-    echo "RUN pip install pipreqs" >> $DOCKERFILE
+    cat << EOT >> $DOCKERFILE
+RUN apt-get update && \\
+    apt-get install -y wget unzip python python-pip python-requests python-twisted && \\
+    apt-get clean && \\
+    pip install pipreqs && \\
+    useradd -ms /bin/bash honey && \\
+EOT
 fi
 
-# create user
-if [ "alpine" = "${OS}" ];
-then
-    #echo "RUN adduser -G honey -S honey" >> $DOCKERFILE
-    echo "RUN addgroup honey && adduser -s /bin/bash -D -G honey honey" >> $DOCKERFILE
-else
-    echo "RUN useradd -ms /bin/bash honey" >> $DOCKERFILE
-fi
+cat << EOT >> $DOCKERFILE
+    mkdir -p /opt && \\
+    cd /opt && wget https://github.com/foospidy/HoneyPy/archive/master.zip && \\
+        unzip master.zip && \\
+        mv HoneyPy-master HoneyPy && \\
+        rm master.zip && \\
+    chmod +x /opt/HoneyPy/Honey.py && \\
+    pipreqs --force /opt/HoneyPy && \\
+    chown -R honey:honey /opt/HoneyPy && \\
+    cd /opt && wget https://github.com/foospidy/clilib/archive/master.zip && \\
+        unzip master.zip && \\
+        rm master.zip && \\
+        mv clilib-master clilib && \\
+    cd /opt/clilib && python setup.py bdist_egg && \\
+        easy_install-2.7 -Z dist/clilib-0.0.1-py2.7.egg && \\
+    cd /opt && wget https://github.com/foospidy/ipt-kit/archive/master.zip && \\
+        unzip master.zip && \\
+        rm master.zip && \\
+        mv ipt-kit-master ipt-kit
 
-# setup HoneyPy
-echo "RUN mkdir -p /opt" >> $DOCKERFILE
-echo "RUN cd /opt && wget https://github.com/foospidy/HoneyPy/archive/master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && unzip master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && mv HoneyPy-master HoneyPy" >> $DOCKERFILE
-echo "RUN cd /opt && rm master.zip" >> $DOCKERFILE
-echo "RUN chmod +x /opt/HoneyPy/Honey.py" >> $DOCKERFILE
-echo "COPY etc/honeypy.cfg /opt/HoneyPy/etc/" >> $DOCKERFILE
-echo "COPY etc/services.cfg /opt/HoneyPy/etc/" >> $DOCKERFILE
-echo "RUN pipreqs --force /opt/HoneyPy" >> $DOCKERFILE
-echo "RUN chown -R honey:honey /opt/HoneyPy" >> $DOCKERFILE
+COPY etc/honeypy.cfg /opt/HoneyPy/etc/
+COPY etc/services.cfg /opt/HoneyPy/etc/
 
-# install clilib
-echo "RUN cd /opt && wget https://github.com/foospidy/clilib/archive/master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && unzip master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && rm master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && mv clilib-master clilib" >> $DOCKERFILE
-echo "RUN cd /opt/clilib && python setup.py bdist_egg" >> $DOCKERFILE
-echo "RUN cd /opt/clilib && easy_install-2.7 -Z dist/clilib-0.0.1-py2.7.egg" >> $DOCKERFILE
+USER honey
 
-# setup ipt-kit
-echo "RUN cd /opt && wget https://github.com/foospidy/ipt-kit/archive/master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && unzip master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && rm master.zip" >> $DOCKERFILE
-echo "RUN cd /opt && mv ipt-kit-master ipt-kit" >> $DOCKERFILE
-
-# set run user
-echo "USER honey" >> $DOCKERFILE
-echo "WORKDIR /opt/HoneyPy" >> $DOCKERFILE
+WORKDIR /opt/HoneyPy
+EOT
 
 # get configured ports and generate expose list
 TCP_LPORTS=(`cat etc/services.cfg | grep -E "low_port.*tcp" | sed -e 's/^.*://'`)
@@ -80,15 +73,11 @@ TCP_HPORTS=(`cat etc/services.cfg | grep -E "^\s?port.*tcp" | sed -e 's/^.*://'`
 UDP_LPORTS=(`cat etc/services.cfg | grep -E "low_port.*udp" | sed -e 's/^.*://'`)
 UDP_HPORTS=(`cat etc/services.cfg | grep -E "^\s?port.*udp" | sed -e 's/^.*://'`)
 
-if [ -f $PORTMAP_FILE ]
-then
-    echo "" > $PORTMAP_FILE
-fi
+echo "" > $PORTMAP_FILE
 
 index=0
 
-while [ "x${TCP_LPORTS[index]}" != "x" ]
-do
+while [ "x${TCP_LPORTS[index]}" != "x" ]; do
     echo "EXPOSE ${TCP_LPORTS[$index]}/tcp" >> $DOCKERFILE
     echo -n "-p ${IPADDRESS}:${TCP_LPORTS[$index]}:${TCP_HPORTS[$index]}/tcp " >> $PORTMAP_FILE
     index=$(( index + 1 ))
@@ -96,8 +85,7 @@ done
 
 index=0
 
-while [ "x${UDP_LPORTS[index]}" != "x" ]
-do
+while [ "x${UDP_LPORTS[index]}" != "x" ]; do
     echo "EXPOSE ${UDP_LPORTS[$index]}/udp" >> $DOCKERFILE
     echo -n "-p ${IPADDRESS}:${UDP_LPORTS[$index]}:${UDP_HPORTS[$index]}/udp " >> $PORTMAP_FILE
     index=$(( index + 1 ))
